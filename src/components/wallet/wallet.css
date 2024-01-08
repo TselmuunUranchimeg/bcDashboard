@@ -1,0 +1,11 @@
+.row {
+    @apply w-full min-w-[800px] flex justify-between;
+}
+
+.header {
+    @apply bg-[#f8f8f8] font-semibold;
+}
+
+.column {
+    @apply w-[calc(100%_/_7)] text-center p-2;
+}

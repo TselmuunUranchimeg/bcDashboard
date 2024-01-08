@@ -1,0 +1,7 @@
+.auth-header {
+    @apply duration-100 w-1/2 select-none py-3 text-xl text-center border-b-[1px];
+}
+
+form input {
+    @apply w-full mb-5 p-3 border-[1px];
+}
