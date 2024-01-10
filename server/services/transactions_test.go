@@ -34,6 +34,7 @@ func TestProcessTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer client.Close()
 	dbAddress := "user=postgres password=tselmuun100 dbname=bcDashboard port=5432 host=localhost sslmode=disable"
 	db, err := InitDb(dbAddress)
 	if err != nil {
@@ -46,16 +47,40 @@ func TestProcessTransaction(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	ch := make(chan error, 1)
-	hm := HashMap{Value: map[string]bool{
-		"0x9b3FDBBE4e112e3925b934c34698F2A695dFA43c": true,
-	}}
+	addressResult, err := db.Query(`SELECT "public_key" FROM "wallets";`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hm := HashMap{Value: map[string]bool{}}
+	for addressResult.Next() {
+		var address string
+		if scanErr := addressResult.Scan(&address); scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		hm.Value[address] = true
+	}
+	result, err := db.Query(`SELECT "contract" FROM "contracts" WHERE "network" = 1;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for result.Next() {
+		var contract string
+		if scanErr := result.Scan(&contract); scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		hm.Contracts[contract] = true
+	}
 	blockNumber := big.NewInt(5004774)
 	block, err := client.BlockByNumber(context.Background(), blockNumber)
 	if err != nil {
 		t.Fatal(err)
 	}
 	createdAt := time.Unix(int64(block.Time()), 0)
-	processTransaction(client, tx, big.NewInt(5004774), db, &wg, ch, &hm, createdAt)
+	start := time.Now()
+	go func() {
+		defer wg.Done()
+		ch <- processTransaction(client, db, tx, blockNumber, &hm, createdAt)
+	}()
 	go func() {
 		wg.Wait()
 		close(ch)
@@ -65,6 +90,7 @@ func TestProcessTransaction(t *testing.T) {
 			t.Fatal(val)
 		}
 	}
+	fmt.Println(time.Since(start).String())
 }
 
 func BenchmarkProcessTransaction(b *testing.B) {
@@ -72,6 +98,7 @@ func BenchmarkProcessTransaction(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer client.Close()
 	dbAddress := "user=postgres password=tselmuun100 dbname=bcDashboard port=5432 host=localhost sslmode=disable"
 	db, err := InitDb(dbAddress)
 	if err != nil {
@@ -85,6 +112,18 @@ func BenchmarkProcessTransaction(b *testing.B) {
 		Value: map[string]bool{
 			"0x9b3FDBBE4e112e3925b934c34698F2A695dFA43c": true,
 		},
+		Id: 1,
+	}
+	result, err := db.Query(`SELECT "contract" FROM "contracts" WHERE "network" = 1;`)
+	if err != nil {
+		b.Fatal(err)
+	}
+	for result.Next() {
+		var contract string
+		if scanErr := result.Scan(&contract); scanErr != nil {
+			b.Fatal(scanErr)
+		}
+		hm.Contracts[contract] = true
 	}
 	for i := 0; i < 2; i++ {
 		tx, _, err := client.TransactionByHash(context.Background(), common.HexToHash(hashes[i]))
@@ -96,7 +135,7 @@ func BenchmarkProcessTransaction(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		go processTransaction(client, tx, blockNumbers[i], db, &wg, ch, &hm, time.Unix(int64(block.Time()), 0))
+		ch <- processTransaction(client, db, tx, blockNumbers[i], &hm, time.Unix(int64(block.Time()), 0))
 	}
 	go func() {
 		wg.Wait()

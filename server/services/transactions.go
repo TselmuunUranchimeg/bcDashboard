@@ -5,10 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -60,101 +60,98 @@ func getTransactionReceipt(client *ethclient.Client, hash common.Hash) (*types.R
 	return receipt, err
 }
 
-func processTransaction(client *ethclient.Client, tx *types.Transaction, blockNumber *big.Int, db *sql.DB, wg *sync.WaitGroup, ch chan error, hm *HashMap, createdAt time.Time) {
+func processTransaction(client *ethclient.Client, db *sql.DB, tx *types.Transaction, blockNumber *big.Int, hm *HashMap, createdAt time.Time) error {
 	hm.Mu.RLock()
 	defer hm.Mu.RUnlock()
-	defer wg.Done()
 	from, err := types.Sender(types.NewLondonSigner(tx.ChainId()), tx)
 	if err != nil {
-		ch <- err
-		return
+		return err
 	}
-	to := tx.To() // Is the contract address if it was a transfer event
+	to := tx.To()
 	if to == nil {
-		return
+		return nil
 	}
 	bytecode, err := getBytecode(client, *to, blockNumber)
 	if err != nil {
-		ch <- err
-		return
+		return err
 	}
-	value := getReadableValue(tx.Value())
-	realBlock := blockNumber.String()
+	value := tx.Value()
 	// Contract address
 	if len(bytecode) > 0 {
+		if len(hm.Contracts) == 0 {
+			return nil
+		}
+		if !hm.Contracts[to.Hex()] {
+			return nil
+		}
 		contractAbi, err := abi.JSON(strings.NewReader(token.TokenMetaData.ABI))
 		if err != nil {
-			ch <- err
-			return
+			return err
 		}
 		transferHash := crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)")).Hex()
 		receipt, err := getTransactionReceipt(client, tx.Hash())
 		if err != nil {
-			ch <- err
-			return
+			return err
 		}
 		for _, receiptLog := range receipt.Logs {
 			if len(receiptLog.Topics) < 3 {
 				continue
 			}
 			if receiptLog.Topics[0].Hex() != transferHash {
-				return
+				return nil
 			}
 			if common.HexToAddress(receiptLog.Topics[1].Hex()).Hex() != from.Hex() {
-				return
+				return nil
 			}
-			if !hm.Value[common.HexToAddress(receiptLog.Topics[2].Hex()).Hex()] {
-				return
+			recipient := common.HexToAddress(receiptLog.Topics[2].Hex()).Hex()
+			if !hm.Value[recipient] {
+				return nil
 			}
 			obj, err := contractAbi.Unpack("Transfer", receiptLog.Data)
 			if err != nil {
-				ch <- err
-				return
+				return err
 			}
 			tokens := getReadableValue(obj[0].(*big.Int))
-			dbTx, err := db.Begin()
+			transaction, err := db.Begin()
 			if err != nil {
-				ch <- err
-				return
+				return err
 			}
-			_, err = dbTx.Exec(`
-				INSERT INTO "transactions"("from_address", "to_address", "value", "hash", "tokens", "contract", "block", "created_at")
-				VALUES($1, $2, $3, $4, $5, $6, $7, $8)
-			`, from.Hex(), common.HexToAddress(receiptLog.Topics[2].Hex()).Hex(), value, tx.Hash().Hex(), tokens, to.Hex(), realBlock, createdAt)
+			_, err = transaction.Exec(`
+				INSERT INTO "transactions"("to_address", "from_address", "value", "valueWei", "block", "hash", "network_id", "created_at", "tokens", "contract")
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+			`, recipient, from.Hex(), getReadableValue(value), value.String(), blockNumber.Uint64(), tx.Hash().Hex(), hm.Id, createdAt, tokens, to.Hex())
 			if err != nil {
-				ch <- err
-				dbTx.Rollback()
-				return
+				transaction.Rollback()
+				return err
 			}
-			err = dbTx.Commit()
-			if err != nil {
-				ch <- err
-				return
+			if err = transaction.Commit(); err != nil {
+				transaction.Rollback()
+				return err
 			}
 		}
-	} else {
-		if !hm.Value[to.Hex()] {
-			return
-		}
-		dbTx, err := db.Begin()
-		if err != nil {
-			ch <- err
-			return
-		}
-		_, err = dbTx.Exec(`
-			INSERT INTO "transactions"("to_address", "from_address", "value", "hash", "block", "created_at")
-			VALUES($1, $2, $3, $4, $5, $6);
-		`, to.Hex(), from.Hex(), value, tx.Hash().Hex(), realBlock, createdAt)
-		if err != nil {
-			ch <- err
-			return
-		}
-		err = dbTx.Commit()
-		if err != nil {
-			ch <- err
-			return
-		}
+		return nil
 	}
+	if !hm.Value[to.Hex()] {
+		return nil
+	}
+	transaction, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = transaction.Exec(`
+		INSERT INTO "transactions"("to_address", "from_address", "value", "valueWei", "block", "hash", "network_id", "created_at")
+		VALUES ($1, $2, $3, $4, $5, $6, $7);
+	`, to.Hex(), from.Hex(), getReadableValue(value), value.String(), blockNumber.Uint64(), tx.Hash().Hex(), hm.Id, createdAt)
+	if err != nil {
+		transaction.Rollback()
+		fmt.Printf("Recipient is %s. This message is coming from the regular Ethereum transfer section\n", to.Hex())
+		return err
+	}
+	if err = transaction.Commit(); err != nil {
+		transaction.Rollback()
+		return err
+	}
+	return nil
 }
 
 type transaction struct {

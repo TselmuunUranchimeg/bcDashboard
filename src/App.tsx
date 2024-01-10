@@ -11,7 +11,7 @@ const App = () => {
         axiosInstance
             .get("/auth/verify")
             .then(() => {
-                navigate(location.pathname === "/" ? "/dashboard" : location.pathname, {
+                navigate(location.pathname === "/" ? "/dashboard/" : location.pathname, {
                     state: {
                         auth: true
                     }

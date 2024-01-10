@@ -10,36 +10,47 @@ import {
 } from "../../components/wallet/wallet";
 import axiosInstance from "../../extras/axios";
 import { KeyPair } from "../../types/wallet";
+import { Network } from "../../types/general";
+import NetworkComponent from "../../components/network";
 
 const WalletPage = () => {
     const [noKeys, setNoKeys] = useState(true);
     const [showKey, setShowKey] = useState<KeyPair | null>(null);
     const [key, setKey] = useState<string>("");
     const [keys, setKeys] = useState<string[] | null>(null);
+    const [network, setNetwork] = useState<Network | null>(null);
 
     useEffect(() => {
-        axiosInstance
-            .get("/wallet/fetch")
-            .then(res => {
-                let body = res.data as string[];
-                if (body.length > 0) {
-                    setKeys(body);
-                    setKey(body[0]);
-                    setNoKeys(false);
-                }
-            })
-            .catch(e => {
-                if (axios.isAxiosError(e)) {
-                    if (e.response) {
-                        alert(e.response.data);
-                    }
-                }
-            })
+        
     }, []);
+
+    useEffect(() => {
+        if (network) {
+            axiosInstance
+                .get(`/wallet/fetch/${network.id}`)
+                .then((res) => {
+                    let body = res.data as string[];
+                    if (body.length > 0) {
+                        setKeys(body);
+                        setKey(body[0]);
+                        setNoKeys(false);
+                    }
+                })
+                .catch((e) => {
+                    if (axios.isAxiosError(e)) {
+                        if (e.response) {
+                            alert(e.response.data);
+                        }
+                    }
+                });
+        }
+    }, [network]);
 
     const createNewAccount = async () => {
         try {
-            let res = await axiosInstance.get("/wallet/create");
+            let res = await axiosInstance.post("/wallet/create", {
+                id: network?.id,
+            });
             let body = res.data as KeyPair;
             setNoKeys(false);
             setShowKey(body);
@@ -47,9 +58,9 @@ const WalletPage = () => {
                 setKey(body.public);
                 setKeys([body.public]);
             } else {
-                setKeys(prev => {
+                setKeys((prev) => {
                     let newVal = prev!;
-                    if (newVal.findIndex(val => val === body.public) === -1) {
+                    if (newVal.findIndex((val) => val === body.public) === -1) {
                         newVal.push(body.public);
                     }
                     return newVal;
@@ -70,7 +81,12 @@ const WalletPage = () => {
 
     return (
         <div className="w-full h-full">
-            <NoKeysSectionComponent visible={noKeys} call={createNewAccount} />
+            <NoKeysSectionComponent
+                visible={noKeys}
+                call={createNewAccount}
+                network={network}
+                setNetwork={setNetwork}
+            />
             <ShowKeyComponent state={showKey} setState={setShowKey} />
             <div
                 className={`w-full h-full flex flex-col box-border px-5 ${
@@ -80,15 +96,11 @@ const WalletPage = () => {
                 <div className="bg-white w-full h-full rounded-md shadow-md">
                     {/* Top section */}
                     <div className="flex justify-between box-border py-5 px-8 sm:items-center items-start sm:flex-row flex-col border-b-[1px] border-opacity-10 border-black">
-                        <div className = "sm:w-[calc(100%_-_175px)] sm:mb-0 mb-4 w-full relative">
+                        <div className="sm:w-[calc(100%_-_350px)] sm:mb-0 mb-4 w-full relative">
                             <Listbox value={key} onChange={setKey}>
-                                <Listbox.Button
-                                    className = "flex items-center justify-between w-full bg-gray-100 box-border px-4 py-2 relative"
-                                >
-                                    <h1 className = "truncate">{key}</h1>
-                                    <FontAwesomeIcon 
-                                        icon = {faChevronDown}
-                                    />
+                                <Listbox.Button className="flex items-center justify-between w-full bg-gray-100 box-border px-4 py-2 relative">
+                                    <h1 className="truncate">{key}</h1>
+                                    <FontAwesomeIcon icon={faChevronDown} />
                                 </Listbox.Button>
                                 <Transition
                                     as={Fragment}
@@ -102,8 +114,10 @@ const WalletPage = () => {
                                                 <Listbox.Option
                                                     value={val}
                                                     key={ind}
-                                                    className = {`w-full box-border px-4 py-2 hover:bg-gray-200 truncate hover:cursor-pointer ${
-                                                        val === key ? "bg-gray-200" : "bg-[#ffffff]"
+                                                    className={`w-full box-border px-4 py-2 hover:bg-gray-200 truncate hover:cursor-pointer ${
+                                                        val === key
+                                                            ? "bg-gray-200"
+                                                            : "bg-[#ffffff]"
                                                     }`}
                                                 >
                                                     {() => (
@@ -118,15 +132,23 @@ const WalletPage = () => {
                                 </Transition>
                             </Listbox>
                         </div>
-                        <button
-                            type="button"
-                            onClick={async () => {
-                                await createNewAccount();
-                            }}
-                            className="bg-[#4e52d0] border-[#606EFF] text-white sm:p-3 p-2   rounded-md hover:bg-[#6974ea] duration-100"
-                        >
-                            Create new wallet
-                        </button>
+                        <div className="flex justify-between w-full sm:w-[325px] items-center">
+                            <div className="w-[calc(50%_-_20px)] relative">
+                                <NetworkComponent 
+                                    setNetwork = {setNetwork}
+                                    network = {network}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    await createNewAccount();
+                                }}
+                                className="bg-[#4e52d0] border-[#606EFF] text-white sm:p-3 p-2 w-1/2 rounded-md hover:bg-[#6974ea] duration-100"
+                            >
+                                Create new wallet
+                            </button>
+                        </div>
                     </div>
                     <TransactionList address={key} />
                 </div>

@@ -5,25 +5,29 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"bcDashboard/services"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-chi/chi/v5"
+	"github.com/lib/pq"
 )
 
 type response struct {
 	Private string `json:"private"`
 	Public  string `json:"public"`
 }
+type createBody struct {
+	Id int `json:"id"`
+}
 
-func CreateWallet(db *sql.DB, hm *services.HashMap) http.HandlerFunc {
+func CreateWallet(db *sql.DB) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name, err := services.IsAuthenticated(r)
 		if err != nil {
@@ -31,9 +35,27 @@ func CreateWallet(db *sql.DB, hm *services.HashMap) http.HandlerFunc {
 			w.Write([]byte(err.Error()))
 			return
 		}
-		wallet, err := services.CreateNewWallet(db, hm, name)
+		decoder := json.NewDecoder(r.Body)
+		defer r.Body.Close()
+		var body createBody
+		if err = decoder.Decode(&body); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		wallet, err := services.CreateNewWallet(db, name, body.Id)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
+			if err, ok := err.(*pq.Error); ok {
+				if err.Code.Name() == "foreign_key_violation" {
+					if strings.Contains(err.Error(), "owner") {
+						w.Write([]byte("Owner doesn't exist"))
+					} else {
+						w.Write([]byte("Network is not registered"))
+					}
+					return
+				}
+			}
 			w.Write([]byte(err.Error()))
 			return
 		}
@@ -41,7 +63,6 @@ func CreateWallet(db *sql.DB, hm *services.HashMap) http.HandlerFunc {
 			Private: wallet.PrivateKey,
 			Public:  wallet.PublicKey,
 		}
-		fmt.Println(data)
 		res, err := json.Marshal(data)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -60,7 +81,8 @@ func FetchAddresses(db *sql.DB) http.HandlerFunc {
 			w.Write([]byte(err.Error()))
 			return
 		}
-		addresses, err := services.FetchWalletAddresses(db, name)
+		id := chi.URLParam(r, "network")
+		addresses, err := services.FetchWalletAddresses(db, name, id)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Write([]byte(err.Error()))
@@ -76,7 +98,7 @@ func FetchAddresses(db *sql.DB) http.HandlerFunc {
 	})
 }
 
-func FetchBalance(client *ethclient.Client, db *sql.DB) http.HandlerFunc {
+func FetchBalance(db *sql.DB, hashmaps map[int]*services.HashMap) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name, err := services.IsAuthenticated(r)
 		if err != nil {
@@ -99,6 +121,21 @@ func FetchBalance(client *ethclient.Client, db *sql.DB) http.HandlerFunc {
 				return
 			}
 		}
+		idStr := chi.URLParam(r, "id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			w.WriteHeader(http.StatusNotAcceptable)
+			w.Write([]byte("Invalid network id"))
+			return
+		}
+		result := db.QueryRow(`SELECT "network_url" FROM "networks" WHERE "id" = $1`, id)
+		var url string
+		if err = result.Scan(&url); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		client := hashmaps[id].Client
 		balance, err := client.BalanceAt(context.Background(), common.HexToAddress(address), nil)
 		if err != nil {
 			w.WriteHeader(http.StatusNotAcceptable)

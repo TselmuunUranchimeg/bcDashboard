@@ -8,6 +8,7 @@ import Homepage from "./routes/dashboard/homepage";
 import AccountPage from "./routes/dashboard/account";
 import WalletPage from "./routes/dashboard/wallet";
 import TransferPage from "./routes/dashboard/transfer";
+import ContractPage from "./routes/contract/contract";
 import AuthPage from "./routes/auth/auth";
 import "./index.css";
 
@@ -26,7 +27,7 @@ const router = createBrowserRouter([
                 element: <Dashboard />,
                 children: [
                     {
-                        path: "/dashboard",
+                        path: "/dashboard/",
                         element: <Homepage />,
                     },
                     {
@@ -40,11 +41,15 @@ const router = createBrowserRouter([
                     {
                         path: "/dashboard/transfer",
                         element: <TransferPage />,
-                    },
+                    }
                 ],
             },
         ],
     },
+    {
+        path: "/contracts",
+        element: <ContractPage />
+    }
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

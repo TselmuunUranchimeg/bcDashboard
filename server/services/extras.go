@@ -1,12 +1,8 @@
 package services
 
 import (
-	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"log"
-	"math/big"
 	"sync"
 	"time"
 
@@ -14,32 +10,11 @@ import (
 )
 
 type HashMap struct {
-	Mu    sync.RWMutex
-	Value map[string]bool
-}
-
-func processBlock(client *ethclient.Client, blockNumber *big.Int, db *sql.DB, hm *HashMap) error {
-	block, err := client.BlockByNumber(context.Background(), blockNumber)
-	if err != nil {
-		return err
-	}
-	var wg sync.WaitGroup
-	ch := make(chan error, block.Transactions().Len())
-	createdAt := time.Unix(int64(block.Time()), 0)
-	for _, tx := range block.Transactions() {
-		wg.Add(1)
-		go processTransaction(client, tx, blockNumber, db, &wg, ch, hm, createdAt)
-	}
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-	for err := range ch {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	Mu               sync.RWMutex
+	Value, Contracts map[string]bool
+	Id               int
+	Client           *ethclient.Client
+	Url              string
 }
 
 func InitDb(dbAddress string) (*sql.DB, error) {
@@ -57,10 +32,33 @@ func InitDb(dbAddress string) (*sql.DB, error) {
 		return nil, err
 	}
 	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS "networks" (
+			id SERIAL PRIMARY KEY,
+			network_url TEXT NOT NULL,
+			name TEXT NOT NULL
+		);
+	`)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS "contracts" (
+			contract TEXT PRIMARY KEY,
+			decimals REAL NOT NULL,
+			symbol TEXT NOT NULL,
+			name TEXT NOT NULL,
+			network SERIAL REFERENCES "networks" ("id")
+		);
+	`)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS "check" (
 			id SERIAL PRIMARY KEY,
-			block_number SERIAL NOT NULL,
-			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+			block_number NUMERIC NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			network SERIAL REFERENCES "networks" ("id")
 		);
 	`)
 	if err != nil {
@@ -69,7 +67,8 @@ func InitDb(dbAddress string) (*sql.DB, error) {
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS "wallets" (
 			public_key TEXT PRIMARY KEY,
-			owner TEXT REFERENCES "users" ("username")
+			owner TEXT REFERENCES "users" ("username"),
+			network_id SERIAL REFERENCES "networks" ("id")
 		);
 	`)
 	if err != nil {
@@ -80,13 +79,14 @@ func InitDb(dbAddress string) (*sql.DB, error) {
 			id SERIAL PRIMARY KEY,
 			to_address TEXT REFERENCES "wallets" ("public_key"),
 			from_address TEXT NOT NULL,
-			value TEXT NOT NULL,
+			value NUMERIC NOT NULL,
+			valueWei NUMERIC NOT NULL,
 			tokens TEXT,
-			contract_id SERIAL REFERENCES "contracts" ("id"),
+			contract TEXT REFERENCES "contracts" ("contract"),
 			block NUMERIC NOT NULL,
 			created_at TIMESTAMPTZ,
-			hash TEXT NOT NULL
-			network_id SERIAL REFERENCES "networks" ("networks")
+			hash TEXT NOT NULL,
+			network_id SERIAL REFERENCES "networks" ("id")
 		);
 	`)
 	if err != nil {
@@ -95,88 +95,52 @@ func InitDb(dbAddress string) (*sql.DB, error) {
 	return db, err
 }
 
-func AddWalletAddresses(db *sql.DB) (*HashMap, error) {
-	hm := HashMap{Value: map[string]bool{}}
-	addressRows, err := db.Query(`SELECT "public_key" FROM "wallets"`)
+func InitNetworks(db *sql.DB) (map[int]string, error) {
+	result, err := db.Query(`SELECT "id", "network_url" FROM "networks" ORDER BY "id";`)
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, err
 	}
-	for addressRows.Next() {
-		var address string
-		scanErr := addressRows.Scan(&address)
-		if scanErr != nil {
-			fmt.Println(scanErr.Error())
+	networks := map[int]string{}
+	for result.Next() {
+		var (
+			id  int
+			url string
+		)
+		if scanErr := result.Scan(&id, &url); scanErr != nil {
 			return nil, scanErr
 		}
-		hm.Value[address] = true
+		networks[id] = url
 	}
-	return &hm, nil
+	return networks, nil
 }
 
-func BackgroundTask(client *ethclient.Client, db *sql.DB, hm *HashMap) {
-	if len(hm.Value) == 0 {
-		return
-	}
-
-	// latest block
-	latest, err := client.BlockNumber(context.Background())
-	if err != nil {
-		fmt.Println(err.Error())
-		log.Fatal(err)
-		return
-	}
-
-	// recent check
-	recentRow := db.QueryRow(`SELECT "block_number" FROM "check" ORDER BY "created_at" DESC LIMIT 1;`)
-	var recent uint64
-	if err = recentRow.Scan(&recent); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			err = processBlock(client, big.NewInt(int64(latest)), db, hm)
-			if err != nil {
-				fmt.Println(err.Error())
-				log.Fatal(err)
-			}
-			_, err = db.Exec(`
-				INSERT INTO "check"("block_number")
-				VALUES($1);
-			`, latest)
-			if err != nil {
-				fmt.Println(err.Error())
-				log.Fatal(err)
-			}
-			return
+func InitHashmaps(db *sql.DB, networks map[int]string) (map[int]*HashMap, error) {
+	result := map[int]*HashMap{}
+	for key, val := range networks {
+		hm, err := createHashmap(db, key, val)
+		if err != nil {
+			return nil, err
 		}
-		fmt.Println(err.Error())
-		log.Fatal(err)
+		result[key] = hm
 	}
+	return result, nil
+}
 
-	// Concurrently process blocks
-	var wg sync.WaitGroup
-	ch := make(chan error, latest-recent)
-	for i := recent + 1; i < latest+1; i++ {
-		wg.Add(1)
-		go func(i int64) {
-			defer wg.Done()
-			ch <- processBlock(client, big.NewInt(i), db, hm)
-		}(int64(i))
-	}
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-	for val := range ch {
-		if val != nil {
-			fmt.Println(val.Error())
-			log.Fatal(err)
+func BackgroundTask(db *sql.DB, hm *HashMap, duration int) {
+	for {
+		if err := backgroundClientTask(db, hm); err != nil {
+			fmt.Printf("%v\n", err.Error())
+			if hm.Client == nil {
+				i := 1
+				for hm.Client != nil {
+					time.Sleep(time.Duration(i) * time.Second)
+					hm.Client, err = ethclient.Dial(hm.Url)
+					if err != nil {
+						i += 1
+					}
+				}
+			}
 		}
-	}
-	_, err = db.Exec(`
-		INSERT INTO "check"("block_number")
-		VALUES($1);
-	`, latest)
-	if err != nil {
-		fmt.Println(err.Error())
-		log.Fatal(err)
+		time.Sleep(time.Second * time.Duration(duration))
 	}
 }

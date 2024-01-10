@@ -10,7 +10,7 @@ import {
     faBars,
 } from "@fortawesome/free-solid-svg-icons";
 import { faEthereum } from "@fortawesome/free-brands-svg-icons";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 
 interface CustomLink {
     icon: IconDefinition;
@@ -22,6 +22,7 @@ interface CustomLink {
 function Dashboard() {
     const [hidden, setHidden] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
 
     useEffect(() => {
         window.addEventListener("resize", () => {
@@ -35,13 +36,16 @@ function Dashboard() {
 
     useEffect(() => {
         window.document.title = "bcDashboard";
+        console.log(location.pathname.split("/"));
     }, []);
 
     const CustomLink = ({ icon, text, path, hidden }: CustomLink) => {
         return (
             <Link
-                to={`/dashboard${path}`}
-                className="flex w-full justify-start items-center box-border pl-6 hover:bg-gray-100 py-3"
+                to={`/dashboard/${path}`}
+                className={`flex w-full justify-start items-center box-border pl-6 py-3 ${
+                    path === location.pathname.split("/")[2] ? "bg-gray-200" : "hover:bg-gray-100"
+                }`}
                 title = {text}
                 onClick = {() => {
                     if (!hidden && window.innerWidth <= 1024) {
@@ -95,19 +99,19 @@ function Dashboard() {
                     <div className="flex w-full flex-col">
                         <CustomLink
                             hidden={hidden}
-                            path="/"
+                            path=""
                             icon={faHouse}
                             text="Dashboard"
                         />
                         <CustomLink
                             hidden={hidden}
-                            path="/wallet"
+                            path="wallet"
                             icon={faWallet}
                             text="Wallet"
                         />
                         <CustomLink
                             hidden={hidden}
-                            path="/transfer"
+                            path="transfer"
                             icon={faEthereum}
                             text="Transfer"
                         />
@@ -115,7 +119,7 @@ function Dashboard() {
                     <div className="w-full flex flex-col pb-8">
                         <CustomLink
                             hidden={hidden}
-                            path="/account"
+                            path="account"
                             icon={faUser}
                             text="Account"
                         />

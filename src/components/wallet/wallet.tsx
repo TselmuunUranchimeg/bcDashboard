@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
 import {
     Key,
     NoKeysSection,
@@ -8,7 +9,7 @@ import {
 } from "../../types/wallet";
 import "./wallet.css";
 import axiosInstance from "../../extras/axios";
-import axios from "axios";
+import NetworkComponent from "../network";
 
 const KeyComponent = ({ text, isPublic }: Key) => {
     const [copied, setCopied] = useState(false);
@@ -85,7 +86,12 @@ const ShowKeyComponent = ({ state, setState }: ShowKey) => {
     );
 };
 
-const NoKeysSectionComponent = ({ visible, call }: NoKeysSection) => {
+const NoKeysSectionComponent = ({
+    visible,
+    call,
+    setNetwork,
+    network
+}: NoKeysSection) => {
     return (
         <div
             className={`w-full h-full flex-col items-center justify-center ${
@@ -96,6 +102,9 @@ const NoKeysSectionComponent = ({ visible, call }: NoKeysSection) => {
                 <p className="italic opacity-60 mb-5 text-xl">
                     This device currently doesn't have any registered wallets
                 </p>
+                <div className="sm:w-1/4 w-full mb-5 shadow-md relative">
+                    <NetworkComponent setNetwork = {setNetwork} network = {network} />
+                </div>
                 <button
                     className="bg-[#4e52d0] border-[#4a4dc4] text-white w-40 font-bold text-lg py-2 rounded-md"
                     type="button"
@@ -115,20 +124,22 @@ const TransactionList = ({ address }: TransactionComponent) => {
     useEffect(() => {
         if (address) {
             axiosInstance
-            .get(`/address/${address}`)
-            .then(res => {
-                let body = res.data as Transaction[];
-                setTransactions(body);
-                if (body.length === 0) {
-                    setMessage("There are no transactions to display at the moment.")
-                }
-            })
-            .catch(e => {
-                if (axios.isAxiosError(e)) {
-                    setTransactions([]);
-                    setMessage(e.response?.data);
-                }
-            });
+                .get(`/address/${address}`)
+                .then((res) => {
+                    let body = res.data as Transaction[];
+                    setTransactions(body);
+                    if (body.length === 0) {
+                        setMessage(
+                            "There are no transactions to display at the moment."
+                        );
+                    }
+                })
+                .catch((e) => {
+                    if (axios.isAxiosError(e)) {
+                        setTransactions([]);
+                        setMessage(e.response?.data);
+                    }
+                });
         }
     }, [address]);
 
@@ -141,10 +152,10 @@ const TransactionList = ({ address }: TransactionComponent) => {
     }) => {
         if (!address) {
             return (
-                <div className = "column">
+                <div className="column">
                     <h1>NULL</h1>
                 </div>
-            )
+            );
         }
         return (
             <div className="column">
@@ -152,8 +163,8 @@ const TransactionList = ({ address }: TransactionComponent) => {
                     href={`https://sepolia.etherscan.io/${
                         isTx ? "tx/" : "address/"
                     }${address}`}
-                    target = "_blank"
-                    className = "hover:underline duration-100"
+                    target="_blank"
+                    className="hover:underline duration-100"
                 >
                     {address.substring(0, 7)}...
                 </a>
@@ -177,10 +188,10 @@ const TransactionList = ({ address }: TransactionComponent) => {
 
     if (!address || transactions.length === 0) {
         return (
-            <div className = "w-full sm:h-[calc(100%_-_89px)] h-[calc(100%_-_137px)] flex justify-center items-center">
-                <h1 className = "italic opacity-70">{message}</h1>
+            <div className="w-full sm:h-[calc(100%_-_89px)] h-[calc(100%_-_137px)] flex justify-center items-center">
+                <h1 className="italic opacity-70">{message}</h1>
             </div>
-        )
+        );
     }
     return (
         <div className="w-full sm:h-[calc(100%_-_89px)] h-[calc(100%_-_137px)] xl:overflow-x-hidden overflow-x-scroll">
@@ -213,12 +224,12 @@ const TransactionList = ({ address }: TransactionComponent) => {
                         key={ind}
                         className={`row ${ind % 2 === 0 ? "" : "bg-[#f5f5f5]"}`}
                     >
-                        <AddressHash isTx = {true} address = {val.hash} />
-                        <AddressHash isTx = {false} address = {val.from} />
+                        <AddressHash isTx={true} address={val.hash} />
+                        <AddressHash isTx={false} address={val.from} />
                         <div className="column">
                             <h1>{val.value}</h1>
                         </div>
-                        <AddressHash isTx = {false} address = {val.contract} />
+                        <AddressHash isTx={false} address={val.contract} />
                         <div className="column">
                             <h1>
                                 {val.tokens.length === 0 ? "NULL" : val.tokens}

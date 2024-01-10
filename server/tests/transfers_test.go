@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"bcDashboard/services"
+
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -12,7 +14,8 @@ func TestTransferEthereum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hash, err := TransferEthereum(
+	defer client.Close()
+	hash, err := services.TransferEthereum(
 		client,
 		"0x885A80eDE1e25Ef5A8917580f0aF8EAbDBE87f9F",
 		"0xA2862D00525Bc367c476a4f1AE5C44d8B87b6DA2",
@@ -30,7 +33,8 @@ func TestTransferTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txHash, err := TransferTokens(
+	defer client.Close()
+	txHash, err := services.TransferTokens(
 		client,
 		"0xA2862D00525Bc367c476a4f1AE5C44d8B87b6DA2", // from
 		"0x885A80eDE1e25Ef5A8917580f0aF8EAbDBE87f9F", //to,

@@ -1,4 +1,5 @@
 import { Dispatch, SetStateAction } from "react";
+import { Network } from "./general";
 
 export interface KeyPair {
     private: string;
@@ -11,6 +12,8 @@ export interface Key {
 export interface NoKeysSection {
     visible: boolean;
     call: () => Promise<void>;
+    network: Network | null;
+    setNetwork: Dispatch<SetStateAction<Network | null>>;
 }
 export interface ShowKey {
     state: KeyPair | null;
