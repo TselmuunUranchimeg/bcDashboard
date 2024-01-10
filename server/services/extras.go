@@ -80,7 +80,7 @@ func InitDb(dbAddress string) (*sql.DB, error) {
 			to_address TEXT REFERENCES "wallets" ("public_key"),
 			from_address TEXT NOT NULL,
 			value NUMERIC NOT NULL,
-			valueWei NUMERIC NOT NULL,
+			value_wei NUMERIC NOT NULL,
 			tokens TEXT,
 			contract TEXT REFERENCES "contracts" ("contract"),
 			block NUMERIC NOT NULL,

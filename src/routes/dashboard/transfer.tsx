@@ -26,7 +26,6 @@ const TransferPage = () => {
     const [contract, setContract] = useState("");
     const [pk, setPk] = useState("");
     const [amount, setAmount] = useState("");
-    const [networks, setNetworks] = useState<Array<Network>>([]);
     const [network, setNetwork] = useState<Network | null>(null);
 
     useEffect(() => {
@@ -35,7 +34,6 @@ const TransferPage = () => {
             .get("/networks")
             .then((res) => {
                 let body = res.data as Network[];
-                setNetworks(body);
                 setNetwork(body[0]);
             })
             .catch((e) => {
@@ -52,11 +50,12 @@ const TransferPage = () => {
                 .then((res) => {
                     let body = res.data as string[];
                     setKeys(body);
-                    setKey(body[0]);
+                    setKey(body.length > 0 ? body[0] : "");
                 })
                 .catch((e) => {
                     if (axios.isAxiosError(e)) {
                         alert(e.response?.data);
+                        setKeys([]);
                     }
                 });
         }
@@ -86,16 +85,6 @@ const TransferPage = () => {
         );
     }
 
-    if (keys.length === 0) {
-        return (
-            <div className="w-full h-full flex items-center justify-center">
-                <h1 className="italic opacity-60">
-                    You don't have any wallet at the moment.
-                </h1>
-            </div>
-        );
-    }
-
     const handlePrep = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setPrep(true);
@@ -111,7 +100,7 @@ const TransferPage = () => {
     };
 
     return (
-        <div className="w-full h-full bg-white shadow-md box-border p-5">
+        <div className="w-full h-full bg-white shadow-md box-border p-5 flex justify-center">
             {/* Confirmation popup window */}
             <div
                 className={`justify-center box-border pt-32 w-screen h-screen absolute top-0 lg:left-0 left-[-60px] ${
@@ -184,131 +173,146 @@ const TransferPage = () => {
                     </div>
                 </div>
             </div>
-            <div className="w-full flex sm:flex-row flex-col relative mb-8 items-center sm:justify-between">
-                <div className="sm:w-[calc(50%_-_30px)] w-full relative sm:mb-0 mb-5">
-                    <Listbox value={key} onChange={setKey}>
-                        <Listbox.Button className="flex items-center justify-between w-full bg-gray-100 box-border px-4 py-2 relative">
-                            <h1 className="truncate">{key}</h1>
-                            <FontAwesomeIcon icon={faChevronDown} />
-                        </Listbox.Button>
-                        <Transition
-                            as={Fragment}
-                            leave="transition ease-in duration-100"
-                            leaveFrom="opacity-100"
-                            leaveTo="opacity-0"
+            <div
+                className={`md:w-full w-3/4 justify-center h-full items-center ${
+                    keys.length === 0 ? "flex" : "hidden"
+                } relative flex-col text-center`}
+            >
+                <h1 className="italic opacity-60 mb-7">
+                    You don't have any wallet in this network at the moment.
+                </h1>
+                <NetworkComponent network={network} setNetwork={setNetwork} />
+            </div>
+            <div
+                className={`w-full h-full ${keys.length === 0 ? "hidden" : ""}`}
+            >
+                <div
+                    className={`w-full sm:flex-row flex-col relative mb-8 items-center sm:justify-between flex`}
+                >
+                    <div className="sm:w-[calc(50%_-_30px)] w-full relative sm:mb-0 mb-5">
+                        <Listbox value={key} onChange={setKey}>
+                            <Listbox.Button className="flex items-center justify-between w-full bg-gray-100 box-border px-4 py-2 relative">
+                                <h1 className="truncate">{key}</h1>
+                                <FontAwesomeIcon icon={faChevronDown} />
+                            </Listbox.Button>
+                            <Transition
+                                as={Fragment}
+                                leave="transition ease-in duration-100"
+                                leaveFrom="opacity-100"
+                                leaveTo="opacity-0"
+                            >
+                                <Listbox.Options className="z-10 absolute w-full shadow-md max-h-[250px] overflow-y-auto">
+                                    {keys?.map((val, ind) => {
+                                        return (
+                                            <Listbox.Option
+                                                value={val}
+                                                key={ind}
+                                                className={`w-full box-border px-4 py-2 hover:bg-gray-200 truncate hover:cursor-pointer ${
+                                                    val === key
+                                                        ? "bg-gray-200"
+                                                        : "bg-[#ffffff]"
+                                                }`}
+                                            >
+                                                {() => (
+                                                    <>
+                                                        <span>{val}</span>
+                                                    </>
+                                                )}
+                                            </Listbox.Option>
+                                        );
+                                    })}
+                                </Listbox.Options>
+                            </Transition>
+                        </Listbox>
+                    </div>
+                    <div className="sm:w-1/2 w-full relative">
+                        <NetworkComponent
+                            network={network}
+                            setNetwork={setNetwork}
+                        />
+                    </div>
+                </div>
+                <div className="w-full flex md:flex-row flex-col shadow-md box-border px-5">
+                    <div className="w-full flex justify-between box-border p-3 pl-0">
+                        <h1 className="font-semibold">Balance</h1>
+                        <h1>{balance}</h1>
+                    </div>
+                </div>
+                <div className="w-full box-border px-3 py-5">
+                    <div className="md:w-1/3 w-full flex mb-5">
+                        <div
+                            className={`w-1/2 flex items-center box-border py-5 duration-100 justify-center text-2xl font-semibold ${
+                                isEth ? "bg-gray-200" : "bg-white"
+                            } cursor-pointer`}
+                            onClick={() => {
+                                if (!isEth) {
+                                    setIsEth(true);
+                                }
+                            }}
                         >
-                            <Listbox.Options className="z-10 absolute w-full shadow-md max-h-[250px] overflow-y-auto">
-                                {keys?.map((val, ind) => {
-                                    return (
-                                        <Listbox.Option
-                                            value={val}
-                                            key={ind}
-                                            className={`w-full box-border px-4 py-2 hover:bg-gray-200 truncate hover:cursor-pointer ${
-                                                val === key
-                                                    ? "bg-gray-200"
-                                                    : "bg-[#ffffff]"
-                                            }`}
-                                        >
-                                            {() => (
-                                                <>
-                                                    <span>{val}</span>
-                                                </>
-                                            )}
-                                        </Listbox.Option>
-                                    );
-                                })}
-                            </Listbox.Options>
-                        </Transition>
-                    </Listbox>
-                </div>
-                <div className="sm:w-1/2 w-full relative">
-                    <NetworkComponent
-                        network={network}
-                        setNetwork={setNetwork}
-                        networks={networks}
-                    />
-                </div>
-            </div>
-            <div className="w-full flex md:flex-row flex-col shadow-md box-border px-5">
-                <div className="w-full flex justify-between box-border p-3 pl-0">
-                    <h1 className="font-semibold">Balance</h1>
-                    <h1>{balance}</h1>
-                </div>
-            </div>
-            <div className="w-full box-border px-3 py-5">
-                <div className="md:w-1/3 w-full flex mb-5">
-                    <div
-                        className={`w-1/2 flex items-center box-border py-5 duration-100 justify-center text-2xl font-semibold ${
-                            isEth ? "bg-gray-200" : "bg-white"
-                        } cursor-pointer`}
-                        onClick={() => {
-                            if (!isEth) {
-                                setIsEth(true);
-                            }
-                        }}
-                    >
-                        <h1>Ethereum</h1>
+                            <h1>Ethereum</h1>
+                        </div>
+                        <div
+                            className={`w-1/2 flex items-center box-border py-5 duration-100 justify-center text-2xl font-semibold ${
+                                isEth ? "bg-white" : "bg-gray-200"
+                            } cursor-pointer`}
+                            onClick={() => {
+                                if (isEth) {
+                                    setIsEth(false);
+                                }
+                            }}
+                        >
+                            <h1>Tokens</h1>
+                        </div>
                     </div>
-                    <div
-                        className={`w-1/2 flex items-center box-border py-5 duration-100 justify-center text-2xl font-semibold ${
-                            isEth ? "bg-white" : "bg-gray-200"
-                        } cursor-pointer`}
-                        onClick={() => {
-                            if (isEth) {
-                                setIsEth(false);
-                            }
-                        }}
-                    >
-                        <h1>Tokens</h1>
-                    </div>
+                    <form className="w-full" onSubmit={(e) => handlePrep(e)}>
+                        <input
+                            required
+                            type="text"
+                            placeholder="Recipient"
+                            onChange={(e) => {
+                                setTo(e.target.value);
+                            }}
+                            value={to}
+                        />
+                        <input
+                            required
+                            type="password"
+                            placeholder="Private key"
+                            value={pk}
+                            onChange={(e) => {
+                                setPk(e.target.value);
+                            }}
+                        />
+                        <input
+                            required
+                            type="number"
+                            placeholder="Amount"
+                            min={isEth ? 0.00001 : 1}
+                            step={isEth ? 0.00001 : 1}
+                            value={amount}
+                            onChange={(e) => {
+                                setAmount(e.target.value);
+                            }}
+                        />
+                        <input
+                            required={isEth ? false : true}
+                            type="text"
+                            placeholder="Contract address"
+                            value={contract}
+                            onChange={(e) => {
+                                setContract(e.target.value);
+                            }}
+                            className={`${isEth ? "hidden" : ""}`}
+                        />
+                        <button
+                            type="submit"
+                            className="from-[#606EFF] to-[#BF66FF] bg-gradient-to-tr text-white px-5 py-3 rounded-md font-semibold text-xl"
+                        >
+                            Transfer
+                        </button>
+                    </form>
                 </div>
-                <form className="w-full" onSubmit={(e) => handlePrep(e)}>
-                    <input
-                        required
-                        type="text"
-                        placeholder="Recipient"
-                        onChange={(e) => {
-                            setTo(e.target.value);
-                        }}
-                        value={to}
-                    />
-                    <input
-                        required
-                        type="password"
-                        placeholder="Private key"
-                        value={pk}
-                        onChange={(e) => {
-                            setPk(e.target.value);
-                        }}
-                    />
-                    <input
-                        required
-                        type="number"
-                        placeholder="Amount"
-                        min={isEth ? 0.00001 : 1}
-                        step={isEth ? 0.00001 : 1}
-                        value={amount}
-                        onChange={(e) => {
-                            setAmount(e.target.value);
-                        }}
-                    />
-                    <input
-                        required={isEth ? false : true}
-                        type="text"
-                        placeholder="Contract address"
-                        value={contract}
-                        onChange={(e) => {
-                            setContract(e.target.value);
-                        }}
-                        className={`${isEth ? "hidden" : ""}`}
-                    />
-                    <button
-                        type="submit"
-                        className="from-[#606EFF] to-[#BF66FF] bg-gradient-to-tr text-white px-5 py-3 rounded-md font-semibold text-xl"
-                    >
-                        Transfer
-                    </button>
-                </form>
             </div>
         </div>
     );

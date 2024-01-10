@@ -30,10 +30,10 @@ const WalletPage = () => {
                 .get(`/wallet/fetch/${network.id}`)
                 .then((res) => {
                     let body = res.data as string[];
+                    setKeys(body);
+                    setNoKeys(body.length > 0 ? false : true);
                     if (body.length > 0) {
-                        setKeys(body);
                         setKey(body[0]);
-                        setNoKeys(false);
                     }
                 })
                 .catch((e) => {

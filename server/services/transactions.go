@@ -117,8 +117,8 @@ func processTransaction(client *ethclient.Client, db *sql.DB, tx *types.Transact
 				return err
 			}
 			_, err = transaction.Exec(`
-				INSERT INTO "transactions"("to_address", "from_address", "value", "valueWei", "block", "hash", "network_id", "created_at", "tokens", "contract")
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+				INSERT INTO "transactions"("to_address", "from_address", "value", "value_wei", "block", "hash", "network_id", "created_at", "tokens", "contract")
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 			`, recipient, from.Hex(), getReadableValue(value), value.String(), blockNumber.Uint64(), tx.Hash().Hex(), hm.Id, createdAt, tokens, to.Hex())
 			if err != nil {
 				transaction.Rollback()
@@ -139,8 +139,8 @@ func processTransaction(client *ethclient.Client, db *sql.DB, tx *types.Transact
 		return err
 	}
 	_, err = transaction.Exec(`
-		INSERT INTO "transactions"("to_address", "from_address", "value", "valueWei", "block", "hash", "network_id", "created_at")
-		VALUES ($1, $2, $3, $4, $5, $6, $7);
+		INSERT INTO "transactions"("to_address", "from_address", "value", "value_wei", "block", "hash", "network_id", "created_at")
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 	`, to.Hex(), from.Hex(), getReadableValue(value), value.String(), blockNumber.Uint64(), tx.Hash().Hex(), hm.Id, createdAt)
 	if err != nil {
 		transaction.Rollback()
