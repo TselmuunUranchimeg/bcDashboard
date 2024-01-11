@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"bcDashboard/services"
 )
@@ -21,7 +22,7 @@ func RegisterContract(db *sql.DB, hashmaps map[int]*services.HashMap) http.Handl
 			w.Write([]byte("not authenticated"))
 			return
 		}
-		if name != "Tselmuun" {
+		if name != os.Getenv("ADMIN_NAME") {
 			w.WriteHeader(http.StatusNotAcceptable)
 			w.Write([]byte("not admin"))
 			return
